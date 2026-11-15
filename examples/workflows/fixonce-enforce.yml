@@ -1,0 +1,21 @@
+# Copy to .github/workflows/ in the repo you want to protect.
+# Runs every learned rule on each PR. No API key, no model call: plain Semgrep.
+name: fix-once enforce
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  enforce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run learned rules
+        run: |
+          if ! ls .fixonce/rules/*.yaml >/dev/null 2>&1; then
+            echo "No learned rules yet."; exit 0
+          fi
+          pip install --quiet semgrep
+          semgrep scan --config .fixonce/rules --error --metrics off

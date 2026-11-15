@@ -1,0 +1,46 @@
+# Copy to .github/workflows/ in the repo you want to protect.
+# Label a security fix PR "security-fix". When it merges, this opens a follow-up PR
+# that adds a tested rule and lists other places with the same bug.
+name: fix-once learn
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: SHA of a commit that fixed a vulnerability
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  learn:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       contains(github.event.pull_request.labels.*.name, 'security-fix'))
+    runs-on: ubuntu-latest
+    env:
+      FIX_SHA: ${{ github.event.pull_request.merge_commit_sha || inputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref || github.ref }}
+          fetch-depth: 0
+      - id: fixonce
+        uses: nikithaa04/fix-once@v0
+        with:
+          base: ${{ env.FIX_SHA }}^
+          head: ${{ env.FIX_SHA }}
+          source: ${{ github.event.pull_request.html_url || env.FIX_SHA }}
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+      - if: steps.fixonce.outputs.rule-added == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: fixonce/rule-${{ env.FIX_SHA }}
+          add-paths: .fixonce/rules
+          title: "fix-once: remember the fix from ${{ env.FIX_SHA }}"
+          commit-message: "fix-once: add rule learned from ${{ env.FIX_SHA }}"
+          body-path: ${{ steps.fixonce.outputs.report-path }}

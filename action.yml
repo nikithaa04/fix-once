@@ -1,0 +1,62 @@
+name: fix-once
+description: Turn a merged security fix into a tested Semgrep rule and hunt for variants of the same bug.
+branding:
+  icon: shield
+  color: blue
+inputs:
+  base:
+    description: Commit before the fix, for example "<merge sha>^".
+    required: true
+  head:
+    description: Commit that contains the fix.
+    required: true
+  anthropic-api-key:
+    description: Your Anthropic API key. Code from the fix is sent to the Anthropic API under this key.
+    required: true
+  source:
+    description: Link to the pull request or incident. Stored in the rule metadata.
+    required: false
+    default: ""
+  model:
+    description: Model to use.
+    required: false
+    default: claude-sonnet-5-5
+  rules-dir:
+    description: Where learned rules live in the repo.
+    required: false
+    default: .fixonce/rules
+outputs:
+  rule-added:
+    description: '"true" if a rule passed testing and was written.'
+    value: ${{ steps.learn.outputs.rule-added }}
+  rule-path:
+    description: Path of the new rule file.
+    value: ${{ steps.learn.outputs.rule-path }}
+  variants:
+    description: Number of other places in the repo that match the new rule.
+    value: ${{ steps.learn.outputs.variants }}
+  report-path:
+    description: Markdown report, ready to use as a pull request body.
+    value: ${{ runner.temp }}/fixonce-report.md
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install fix-once and Semgrep
+      shell: bash
+      run: pip install --quiet semgrep "${{ github.action_path }}"
+    - name: Learn from the fix
+      id: learn
+      shell: bash
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.anthropic-api-key }}
+        FIXONCE_BASE: ${{ inputs.base }}
+        FIXONCE_HEAD: ${{ inputs.head }}
+        FIXONCE_SOURCE: ${{ inputs.source }}
+        FIXONCE_MODEL: ${{ inputs.model }}
+        FIXONCE_RULES_DIR: ${{ inputs.rules-dir }}
+      run: |
+        fixonce learn --base "$FIXONCE_BASE" --head "$FIXONCE_HEAD" --source "$FIXONCE_SOURCE" \
+          --rules-dir "$FIXONCE_RULES_DIR" --report "$RUNNER_TEMP/fixonce-report.md"
